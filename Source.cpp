@@ -27,7 +27,9 @@ int main(int argc, char* argv[])
     float gravity = 9.8;
     float dt = 0.1;
 
-    bool editing = 0;
+    enum Entity_Type type_entity = PLAYER;
+
+    bool editing = 1;
 
 	string location_of_txt = "C:\\Users\\shaur\\Desktop\\Project\\Physics eng\\LIVEOUT\\tilemap.txt";
 	string location_of_tiles = "C:\\Users\\shaur\\Desktop\\Project\\Physics eng\\LIVEOUT\\tiles\\";
@@ -54,6 +56,8 @@ int main(int argc, char* argv[])
     vector<tile> current_map = loader(location_of_txt);
     vector<Entity> current_loader = loader_entity(location_of_txt_for_entity);
 
+    vector<Entity> current_loader_copy = current_loader;
+
     for (Entity& e : current_loader) {
         e.acceleration_y = gravity; 
     }
@@ -71,7 +75,15 @@ int main(int argc, char* argv[])
     SDL_Color textColor = { 255, 255, 255, 255 };
 
     string type[] = {"TILE", "ENTITY"};
+    string editing_state[] = {"Playing", "Editing" };
     bool type_num = 0;
+
+    // 1. Define your rigid physics timestep (60 Hz)
+    const float PHYSICS_DT = 1.0f / 60.0f;
+
+    // 2. Setup your time tracking variables before the main loop
+    Uint64 currentTime = SDL_GetPerformanceCounter();
+    float accumulator = 0.0f;
 
     while (!quit) {
         while (SDL_PollEvent(&e) != 0) {
@@ -121,24 +133,43 @@ int main(int argc, char* argv[])
 
                         auto it = std::find_if(current_loader.begin(), current_loader.end(),
                             [snapX, snapY, entity_id](const Entity& e) {
-                                return (e.x == snapX && e.y == snapY && e.type == (entity_id));
+                                return (e.x == snapX && e.y == snapY && e.id == (entity_id));
                             }
                         );
                         if (it != current_loader.end()) {
-                            // 1. Swap the tile we want to delete with the very last tile
-                            *it = current_loader.back();
+                            size_t index = std::distance(current_loader.begin(), it);
 
-                            // 2. Delete the last tile (which is now a duplicate)
-                            current_loader.pop_back();
+                            // Erase from both arrays at the same position to keep them perfectly in sync
+                            current_loader.erase(current_loader.begin() + index);
+                            current_loader_copy.erase(current_loader_copy.begin() + index);
                         }
                         else {//re write these for entity
-                            editor(location_of_txt_for_entity, { entity_id, PLAYER, (float)snapX, (float)snapY, 0, 0, 0, 0, 0, 10, 1, 0,
-                                location_of_tiles + to_string(entity_id) + ".png", 4, 10,
-                                {{snapX + 10, snapY + 10},{snapX - 10, snapY - 10},{snapX - 10, snapY + 10},{snapX + 10, snapY - 10}}, 1 });   
-                                
-                            current_loader.push_back({ entity_id, PLAYER, (float)snapX, (float)snapY, 0, 0, 0, 0, 0, 10, 1, 0,
-                                location_of_tiles + to_string(entity_id) + ".png", 4, 10,
-                                { {snapX + 10, snapY + 10},{snapX - 10, snapY - 10},{snapX - 10, snapY + 10},{snapX + 10, snapY - 10} }, 1});
+                            if (type_entity == PLAYER) {
+                                editor(location_of_txt_for_entity, { entity_id, PLAYER, (float)snapX, (float)snapY, 0, 0, 0, 0, 0, 10, 1, 0,
+                                location_of_tiles + to_string(entity_id) + ".png", 4, tilesize,
+                                {{snapX, snapY},{snapX + tilesize, snapY},{snapX, snapY + tilesize},{snapX + tilesize, snapY + tilesize}}, 1 });
+                             
+                                current_loader.push_back({ entity_id, PLAYER, (float)snapX, (float)snapY, 0, 0, 0, 0, 0, 10, 1, 0,
+                                location_of_tiles + to_string(entity_id) + ".png", 4, tilesize,
+                                { {snapX, snapY},{snapX + tilesize, snapY},{snapX, snapY + tilesize},{snapX + tilesize, snapY + tilesize} }, 1 });
+
+                                current_loader_copy.push_back({ entity_id, PLAYER, (float)snapX, (float)snapY, 0, 0, 0, 0, 0, 10, 1, 0,
+                                location_of_tiles + to_string(entity_id) + ".png", 4, tilesize,
+                                { {snapX, snapY},{snapX + tilesize, snapY},{snapX, snapY + tilesize},{snapX + tilesize, snapY + tilesize} }, 1 });
+                            }
+                            else if (type_entity == ENEMY) {
+                                editor(location_of_txt_for_entity, { entity_id, ENEMY, (float)snapX, (float)snapY, 0, 0, 0, 0, 0, 10, 1, 0,
+                                location_of_tiles + to_string(entity_id) + ".png", 4, tilesize,
+                                {{snapX, snapY},{snapX + tilesize, snapY},{snapX, snapY + tilesize},{snapX + tilesize, snapY + tilesize}}, 1 });
+
+                                current_loader.push_back({ entity_id, ENEMY, (float)snapX, (float)snapY, 0, 0, 0, 0, 0, 10, 1, 0,
+                                location_of_tiles + to_string(entity_id) + ".png", 4, tilesize,
+                                { {snapX, snapY},{snapX + tilesize, snapY},{snapX, snapY + tilesize},{snapX + tilesize, snapY + tilesize} }, 1 });
+
+                                current_loader_copy.push_back({ entity_id, ENEMY, (float)snapX, (float)snapY, 0, 0, 0, 0, 0, 10, 1, 0,
+                                location_of_tiles + to_string(entity_id) + ".png", 4, tilesize,
+                                { {snapX, snapY},{snapX + tilesize, snapY},{snapX, snapY + tilesize},{snapX + tilesize, snapY + tilesize} }, 1 });
+                            }
                         }
                     }
                     else if (e.button.button == SDL_BUTTON_RIGHT) {
@@ -153,45 +184,85 @@ int main(int argc, char* argv[])
                 }
             }
 			if (e.type == SDL_KEYDOWN) {
-            //make the tile id one better
-				if (e.key.keysym.sym == SDLK_RIGHT && tile_id < max_tile) {
+                if (e.key.keysym.sym == SDLK_RIGHT && tile_id < max_tile && !editing) {
+                    move_the_player(current_loader, 1, 1);
+                }
+                else if (e.key.keysym.sym == SDLK_LEFT && tile_id > 1 && !editing) {
+                    move_the_player(current_loader, 1, -1);
+                }
+                if (e.key.keysym.sym == SDLK_RIGHT && tile_id < max_tile && editing) {
                     tile_id++;
                 }
-                else if (e.key.keysym.sym == SDLK_m) {
-                    mapped = !mapped;
-                }
-                else if(e.key.keysym.sym == SDLK_LEFT && tile_id > 1) {
+                else if (e.key.keysym.sym == SDLK_LEFT && tile_id > 1 && editing) {
                     tile_id--;
                 }
-                else if (e.key.keysym.sym == SDLK_r) {
+                else if (e.key.keysym.sym == SDLK_m && editing) {
+                    mapped = !mapped;
+                }
+                else if (e.key.keysym.sym == SDLK_r && editing) {
                     //rotation = (int)(rotation + 0.1) % 4 + (rotation - (int)rotation);
                     rotation = fmodf(rotation + 0.1f, 4.0f);
                 }
-                else if (e.key.keysym.sym == SDLK_f) {
+                else if (e.key.keysym.sym == SDLK_f && editing) {
                     flip = !flip;
                 }
-                else if (e.key.keysym.sym == SDLK_t) {
+                else if (e.key.keysym.sym == SDLK_t && editing) {
                     size_reset();
                 }
                 else if (e.key.keysym.sym == SDLK_e) {
                     editing = !editing;
                 }
-				else if (e.key.keysym.sym == SDLK_SPACE) {
+				else if (e.key.keysym.sym == SDLK_SPACE && editing) {
 					rotation_reset(rotation);
                 }
-                else if (e.key.keysym.sym == SDLK_c) {
+                else if (e.key.keysym.sym == SDLK_c && editing) {
                     type_num = !type_num;
                 }
-                else if (e.key.keysym.sym == SDLK_UP) {
-                    // add the angle change function: Why i didn't finish now because the rotation 
-                    //parameter is a int add 0.1 step is not allowed
+                else if (e.key.keysym.sym == SDLK_UP && !editing) {
+                    move_the_player(current_loader, 2, -1);
+                }
+                else if (e.key.keysym.sym == SDLK_DOWN && !editing) {
+                    move_the_player(current_loader, 2, 1);
+                }
+                else if (e.key.keysym.sym == SDLK_UP && editing) {
+                    type_entity = ENEMY;
+                }
+                else if (e.key.keysym.sym == SDLK_DOWN && editing) {
+                    type_entity = PLAYER;
                 }
             }
             if (e.type == SDL_MOUSEWHEEL) {
                 tilesize_adjuster(e.wheel.y);
             }
         }
-        natural_force(current_loader, dt); // physics will be handled from here
+
+        // 3. Measure real time passed since the last frame
+        Uint64 newTime = SDL_GetPerformanceCounter();
+        float frameTime = (newTime - currentTime) / (float)SDL_GetPerformanceFrequency();
+        currentTime = newTime;
+
+        // 4. Prevent the "Spiral of Death"
+        if (frameTime > 0.25f) {
+            frameTime = 0.25f;
+        }
+
+        // 5. Pour the real time into the accumulator
+        accumulator += frameTime;
+
+        // 6. Drain the accumulator in fixed chunks
+        while (accumulator >= PHYSICS_DT) {
+            // Run forces and kinematics using the fixed DT
+            natural_force(current_loader, PHYSICS_DT);
+
+            // Run your collision relaxation loop
+            for (int iteration = 0; iteration < 4; iteration++) {
+                collision_detection_entity_tiles(current_loader, current_map);
+                collision_detection_entity_entity(current_loader);
+            }
+
+            // Subtract the fixed chunk from the bucket
+            accumulator -= PHYSICS_DT;
+        }
 
         const Uint8* currentKeyStates = SDL_GetKeyboardState(NULL);
 
@@ -205,22 +276,23 @@ int main(int argc, char* argv[])
 
 		renderer(current_map, location_of_tiles, Renderer);
         renderer_entity(current_loader, location_of_tiles, Renderer);
-        renderer_ghost(to_string(tile_id), rotation, location_of_tiles, Renderer, flip, tilesize, mapped);
+        if (editing) {
+            renderer_ghost(to_string(tile_id), rotation, location_of_tiles, Renderer, flip, tilesize, mapped);
+        }
 
         if (font) {
             int x, y;
             SDL_GetWindowSize(window, &x, &y);
-            RenderText(Renderer, font, type[type_num], x - 80, 15, textColor);
+            if(editing) {RenderText(Renderer, font, type[type_num], x - 80, 15, textColor);}
+            RenderText(Renderer, font, editing_state[editing], x - 80, 38, textColor);
         }
 
         SDL_RenderPresent(Renderer);
         SDL_Delay(16);
-    } 
-    if (editing == 1) {
-        saveMap(current_map, location_of_txt);
-        saveMap(current_loader, location_of_txt_for_entity);
     }
-    
+    saveMap(current_map, location_of_txt);
+    saveMap(current_loader_copy, location_of_txt_for_entity);
+
     SDL_DestroyRenderer(Renderer);
     SDL_DestroyWindow(window);
     if (font) TTF_CloseFont(font);
